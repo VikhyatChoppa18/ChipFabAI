@@ -172,3 +172,11 @@ frontend/dist/
 .gcloud/
 cloudbuild.yaml.backup
 *.yaml.bak
+
+#py files
+test_*.py
+
+#local testing
+pitchdeck
+
+

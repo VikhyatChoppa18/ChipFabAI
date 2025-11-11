@@ -1,19 +1,15 @@
 # ChipFabAI Setup Guide
 
-## 🚀 Quick Setup
 
 This guide explains how to set up the ChipFabAI project after cloning from GitHub.
 
-## 📋 Prerequisites
 
 - Python 3.11+
 - Node.js 18+
 - Google Cloud SDK (for deployment)
 - Docker (for containerization)
 
-## 🔧 Local Development Setup
 
-### 1. Create Python Virtual Environment
 
 ```bash
 # Create virtual environment
@@ -33,7 +29,6 @@ pip install -r gpu-service/requirements.txt
 pip install -r data-processor/requirements.txt
 ```
 
-### 2. Install Frontend Dependencies
 
 ```bash
 # Navigate to frontend directory
@@ -46,7 +41,6 @@ npm install
 cd ..
 ```
 
-### 3. Verify Installation
 
 ```bash
 # Check Python packages
@@ -56,9 +50,7 @@ pip list | grep -E "(fastapi|torch|transformers)"
 cd frontend && npm list --depth=0 && cd ..
 ```
 
-## 🎯 Configuration
 
-### Environment Variables
 
 Create a `.env` file in the project root (optional):
 
@@ -78,9 +70,7 @@ CACHE_TTL=300
 REACT_APP_API_URL=http://localhost:8081
 ```
 
-## 🚀 Running Services
 
-### Option 1: Automated Start (Recommended)
 
 ```bash
 # Start all services
@@ -90,7 +80,6 @@ REACT_APP_API_URL=http://localhost:8081
 ./stop_services_demo.sh
 ```
 
-### Option 2: Manual Start
 
 **Terminal 1 - GPU Service:**
 ```bash
@@ -114,9 +103,7 @@ export REACT_APP_API_URL=http://localhost:8081
 npm start
 ```
 
-## 🧪 Testing
 
-### Run Tests
 
 ```bash
 # Run production tests
@@ -129,9 +116,7 @@ python test_production.py
 python test_all_services.py
 ```
 
-## 📦 Deployment
 
-### Google Cloud Run Deployment
 
 ```bash
 # Set project ID
@@ -142,16 +127,13 @@ export REGION=europe-west4
 ./deploy-demo.sh
 ```
 
-### Local Docker Deployment
 
 ```bash
 # Build and run with Docker Compose
 docker-compose up --build
 ```
 
-## 🔍 Troubleshooting
 
-### Python Dependencies Issues
 
 ```bash
 # Clear pip cache
@@ -161,7 +143,6 @@ pip cache purge
 pip install --force-reinstall -r api-gateway/requirements.txt
 ```
 
-### Node.js Dependencies Issues
 
 ```bash
 # Clear npm cache
@@ -173,7 +154,6 @@ rm -rf node_modules package-lock.json
 npm install
 ```
 
-### Port Conflicts
 
 ```bash
 # Check if ports are in use
@@ -185,7 +165,6 @@ lsof -i :3000  # Frontend
 kill -9 <PID>
 ```
 
-### Model Download Issues
 
 ```bash
 # Set HuggingFace cache directory
@@ -196,7 +175,6 @@ export TRANSFORMERS_CACHE=/tmp/transformers_cache
 export MODEL_CACHE_DIR=/tmp/models
 ```
 
-## 📊 Project Structure
 
 ```
 Mgp_Sys/
@@ -224,21 +202,18 @@ Mgp_Sys/
 └── scripts/              # Deployment scripts
 ```
 
-## 🎯 Next Steps
 
-1. ✅ Set up virtual environment
-2. ✅ Install dependencies
-3. ✅ Configure environment variables
-4. ✅ Start services
-5. ✅ Run tests
-6. ✅ Deploy to Cloud Run
+1.  Set up virtual environment
+2.  Install dependencies
+3.  Configure environment variables
+4.  Start services
+5.  Run tests
+6.  Deploy to Cloud Run
 
-## 📚 Additional Resources
 
 - [README.md](README.md) - Project overview
-- [PERFORMANCE_FEATURES.md](PERFORMANCE_FEATURES.md) - Performance features
-- [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment guide
-- [TESTING_GUIDE.md](TESTING_GUIDE.md) - Testing guide
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment 
+- [TESTING_GUIDE.md](TESTING_GUIDE.md) - Testing 
 
 ---
 
