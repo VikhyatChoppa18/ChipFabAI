@@ -1,0 +1,36 @@
+# docker-compose.local.yml
+services:
+  gpu-service:
+    build: ./gpu-service
+    container_name: chipfabai-gpu-local
+    environment:
+      - MODEL_CACHE_DIR=/tmp/models
+    ports:
+      - "18080:8080"              # host:container
+    volumes:
+      - gpu-cache:/tmp/models
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: chipfabai-api-local
+    environment:
+      - GPU_SERVICE_URL=http://gpu-service:8080
+    depends_on:
+      - gpu-service
+    ports:
+      - "18081:8081"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chipfabai-frontend-local
+    environment:
+      - REACT_APP_API_URL=http://localhost:18081
+    depends_on:
+      - api-gateway
+    ports:
+      - "13333:3000"
+
+volumes:
+  gpu-cache:

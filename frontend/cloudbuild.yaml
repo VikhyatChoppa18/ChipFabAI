@@ -1,0 +1,25 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'REACT_APP_API_URL=${_REACT_APP_API_URL}'
+      - '-t'
+      - '${_IMAGE_URL}'
+      - '.'
+  
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_IMAGE_URL}']
+
+images:
+  - '${_IMAGE_URL}'
+
+substitutions:
+  _REACT_APP_API_URL: ''
+  _IMAGE_URL: ''
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+

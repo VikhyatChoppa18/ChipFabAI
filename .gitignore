@@ -1,0 +1,196 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+venv_test/
+ENV/
+.env
+.venv
+*.egg-info/
+dist/
+build/
+*.log
+*.pid
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+build/
+.DS_Store
+.npm
+.node_repl_history
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Google Cloud
+.gcloudignore
+*.key
+*.json
+.gcloud/
+service-account*.json
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Models and Large Files
+models/
+*.pth
+*.pt
+*.bin
+*.safetensors
+*.onnx
+*.h5
+*.ckpt
+*.pb
+*.tflite
+*.mlmodel
+*.mlpackage
+
+# Data (keep sample_data.csv for testing)
+data/
+datasets/
+*.parquet
+*.feather
+*.hdf5
+*.h5
+# Allow sample_data.csv for testing
+!sample_data.csv
+
+# Logs
+logs/
+*.log
+*.log.*
+*.out
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+
+# Test files
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+
+# Local development
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# PyTorch
+*.pth.tar
+checkpoint*.pth
+
+# TensorFlow
+*.pb
+*.ckpt
+*.meta
+*.index
+
+# Large files
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*.dylib
+
+# Package files
+*.whl
+*.egg
+*.egg-info/
+
+# Frontend build
+frontend/build/
+frontend/.next/
+frontend/out/
+frontend/dist/
+
+# Cloud deployment
+.gcloud/
+cloudbuild.yaml.backup
+*.yaml.bak
+
+#py files
+test_*.py
+
+#local testing
+pitchdeck
+
+
+#local testing
+stop_local.sh
+stop_services_demo.sh
+start_local.sh
+start_services_demo.sh
+deploy.sh
+test_all_performance.sh
+
+
+
+#unwanted readme files
+DEPLOYMENT.md
+
+
