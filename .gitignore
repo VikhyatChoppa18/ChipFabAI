@@ -180,3 +180,17 @@ test_*.py
 pitchdeck
 
 
+#local testing
+stop_local.sh
+stop_services_demo.sh
+start_local.sh
+start_services_demo.sh
+deploy.sh
+test_all_performance.sh
+
+
+
+#unwanted readme files
+DEPLOYMENT.md
+
+
