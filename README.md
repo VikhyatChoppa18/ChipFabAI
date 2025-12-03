@@ -4,6 +4,7 @@
 
 ChipFabAI is an AI-powered platform that optimizes semiconductor manufacturing processes using machine learning models deployed on Google Cloud Run with NVIDIA L4 GPUs. This system addresses critical national interests by enhancing semiconductor yield, reducing waste, and strengthening America's position in the global semiconductor supply chain.
 
+[ChipFabAI.webm](https://github.com/user-attachments/assets/3c059fcf-27cf-49dd-8c2d-9e6aab4a1123)
 
 
 ### Total Addressable Market (TAM)
