@@ -133,6 +133,7 @@ Frontend (React) → API Gateway (FastAPI) → GPU Service (Gemma 2B on NVIDIA L
 
 ## Try It Out
 
+- **DevPost Submission**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA
 - **GitHub**: [Your GitHub Repo]
 - **Live Demo**: [Your Demo URL]
 - **Documentation**: [Your Docs]

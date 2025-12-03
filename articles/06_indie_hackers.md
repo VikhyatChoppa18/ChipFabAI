@@ -144,6 +144,7 @@ Cloud Functions (Anomaly Detection)
 
 ## Resources for Other Builders
 
+- **DevPost**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA
 - **GitHub**: [Your Repo]
 - **Documentation**: [Your Docs]
 - **Demo**: [Your Demo URL]

@@ -174,6 +174,7 @@ async def lifespan(app: FastAPI):
 
 ## Resources
 
+- **DevPost**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA
 - **GitHub**: [Your Repo]
 - **Demo**: [Your Demo URL]
 - **Documentation**: [Your Docs]

@@ -159,10 +159,11 @@ If I win the competition (or even if I don't), here's what I'm building next:
 
 If you're building something similar, here are some resources:
 
+- **DevPost**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA
 - **GitHub**: [Your Repo]
 - **Documentation**: [Your Docs]
 - **Demo**: [Your Demo URL]
-- **DevPost**: [Your Submission]
+- **DevPost**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA
 
 ## Final Thoughts
 
@@ -191,5 +192,5 @@ Until next time,
 ---
 
 **Project**: ChipFabAI - AI-Powered Semiconductor Manufacturing Optimization  
-**Competition**: [DevPost Link]  
+**Competition**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA  
 **Status**: Production-ready, deployed on Google Cloud
