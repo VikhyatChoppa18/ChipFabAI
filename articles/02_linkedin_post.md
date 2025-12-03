@@ -72,5 +72,5 @@ If you're working on AI/ML projects or cloud infrastructure, I'd love to connect
 ---
 
 **Project**: ChipFabAI - AI-Powered Semiconductor Manufacturing Optimization  
-**Competition**: [DevPost Link]  
+**Competition**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA  
 **GitHub**: [Your Repo]

@@ -165,5 +165,5 @@ If you're building something similar, feel free to reach out. I'm always happy t
 
 **Project**: ChipFabAI  
 **Status**: Production-ready, deployed on Google Cloud  
-**Competition**: [DevPost Link]  
+**Competition**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA  
 **Cost**: ~$600-1200/month (optimized)

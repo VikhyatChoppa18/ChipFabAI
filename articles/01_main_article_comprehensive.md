@@ -295,6 +295,6 @@ And if you're building something with AI and cloud infrastructure, feel free to 
 **Project Links**:
 - GitHub: [Your GitHub Repo]
 - Live Demo: [Your Demo URL]
-- DevPost: [Your DevPost Submission]
+- DevPost: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA
 
 **Tech Stack**: Python, FastAPI, React, Google Cloud Run, NVIDIA L4 GPU, Gemma 2B, Cloud Pub/Sub, Cloud Functions, Vertex AI Workbench

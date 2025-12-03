@@ -79,7 +79,7 @@ You just need to:
 
 12/ 🔗 LINKS
 Project: ChipFabAI - AI-Powered Semiconductor Manufacturing Optimization
-Competition: [DevPost Link]
+Competition: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA
 GitHub: [Your Repo]
 Demo: [Your Demo URL]
 

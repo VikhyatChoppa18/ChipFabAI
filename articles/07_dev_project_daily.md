@@ -190,4 +190,4 @@ async def lifespan(app: FastAPI):
 
 **Project**: ChipFabAI  
 **Status**: Production-ready  
-**Competition**: [DevPost Link]
+**Competition**: https://devpost.com/software/stockflow-ie14tk/joins/QmuzI_5H31FEWkbGWGZ6lA
