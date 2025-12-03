@@ -4,13 +4,7 @@
 
 ChipFabAI is an AI-powered platform that optimizes semiconductor manufacturing processes using machine learning models deployed on Google Cloud Run with NVIDIA L4 GPUs. This system addresses critical national interests by enhancing semiconductor yield, reducing waste, and strengthening America's position in the global semiconductor supply chain.
 
-### National Interest Alignment
 
-This project directly supports:
-- **CHIPS and Science Act (2022)**: Advances semiconductor manufacturing capabilities critical to national security and economic competitiveness
-- **White House AI Plan**: Implements AI-driven solutions for critical infrastructure and advanced manufacturing
-- **National Security**: Strengthens domestic semiconductor production capabilities
-- **Economic Competitiveness**: Reduces manufacturing costs and improves yield rates
 
 ### Total Addressable Market (TAM)
 
