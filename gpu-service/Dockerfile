@@ -40,8 +40,9 @@ ENV CUDA_VISIBLE_DEVICES=0
 EXPOSE 8080
 
 # Health check for Cloud Run
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import requests; requests.get('http://localhost:8080/health', timeout=5)"
+# Cloud Run has its own health checks, but this helps during container startup
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"
 
 # Run the application
 CMD ["python3", "main.py"]

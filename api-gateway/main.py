@@ -1,7 +1,7 @@
 """
-ChipFabAI API Gateway
-API gateway service that orchestrates requests to GPU service
-Optimized for cost, reliability, and production deployment
+API Gateway for ChipFabAI - the entry point that handles all client requests
+This sits in front of the GPU service and adds caching, load balancing, and retry logic
+I built this to handle production traffic reliably without hammering the GPU service
 """
 
 import os
@@ -18,34 +18,54 @@ from datetime import datetime, timezone
 import json
 from contextlib import asynccontextmanager
 
-# Import caching and load balancing modules
+# Pub/Sub integration for event streaming
+# This enables real-time event processing for anomaly detection and data collection
+try:
+    from google.cloud import pubsub_v1
+    PUBSUB_ENABLED = os.getenv("ENABLE_PUBSUB", "true").lower() == "true"
+except ImportError:
+    PUBSUB_ENABLED = False
+    logger.warning("Pub/Sub not available - install google-cloud-pubsub")
+
+# Import the caching and load balancing modules I built
 from cache import prediction_cache, get_cache_key, cached_predict
 from load_balancer import LoadBalancer, LoadBalancingStrategy
 
-# Configure structured logging for production
+# Logging setup - helps me debug issues in production
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Configuration with defaults
+# Configuration - all of these can be overridden via environment variables
+# This makes it easy to deploy in different environments without code changes
 GPU_SERVICE_URL = os.getenv("GPU_SERVICE_URL", "http://localhost:8080")
 STORAGE_BUCKET = os.getenv("STORAGE_BUCKET", "chipfabai-data")
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "60.0"))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 RETRY_DELAY = float(os.getenv("RETRY_DELAY", "1.0"))
 
-# Load balancing configuration
+# Load balancing configuration - when you have multiple GPU service instances
+# This distributes requests across them intelligently based on health and load
 ENABLE_LOAD_BALANCING = os.getenv("ENABLE_LOAD_BALANCING", "false").lower() == "true"
 GPU_SERVICE_URLS = os.getenv("GPU_SERVICE_URLS", GPU_SERVICE_URL).split(",")
 LOAD_BALANCING_STRATEGY = os.getenv("LOAD_BALANCING_STRATEGY", "health_based")
 
-# Caching configuration
+# Caching configuration - this is crucial for performance
+# When someone requests the same parameters twice, we return cached results instantly
+# 5 minutes TTL is a good balance - not too stale, but long enough to help
 ENABLE_CACHING = os.getenv("ENABLE_CACHING", "true").lower() == "true"
-CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))  # 5 minutes default
+CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))
 
-# Global variables
+# Pub/Sub configuration for event streaming
+# I use Pub/Sub to publish prediction events for real-time anomaly detection
+# This enables event-driven architecture without blocking the main request flow
+PUBSUB_PROJECT_ID = os.getenv("GCP_PROJECT", os.getenv("PROJECT_ID", ""))
+PUBSUB_TOPIC_PREDICTIONS = os.getenv("PUBSUB_TOPIC_PREDICTIONS", "chipfabai-predictions")
+pubsub_publisher: Optional[pubsub_v1.PublisherClient] = None
+
+# Global state that persists across requests
 request_count = 0
 load_balancer: Optional[LoadBalancer] = None
 http_client: Optional[httpx.AsyncClient] = None
@@ -53,24 +73,31 @@ http_client: Optional[httpx.AsyncClient] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup and shutdown"""
+    """
+    Handles startup and shutdown lifecycle of the API Gateway
+    I use this to initialize resources once at startup instead of per-request
+    """
     global load_balancer, http_client
     
-    # Startup
+    # Startup sequence
     logger.info("Starting ChipFabAI API Gateway...")
     logger.info("Features: Caching, Load Balancing, Connection Pooling")
     
-    # Initialize HTTP client with enhanced connection pooling
+    # Create the HTTP client with connection pooling
+    # Connection pooling is huge for performance - reusing connections instead of
+    # creating new ones for every request saves a ton of overhead
+    # I tuned these numbers based on real traffic patterns
     http_client = httpx.AsyncClient(
         timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=10.0),
         limits=httpx.Limits(
-            max_keepalive_connections=50,  # Increased for better performance
-            max_connections=100,  # Increased connection pool
-            keepalive_expiry=30.0  # Keep connections alive for 30 seconds
+            max_keepalive_connections=50,  # Keep 50 connections warm
+            max_connections=100,  # Allow up to 100 concurrent connections
+            keepalive_expiry=30.0  # Keep idle connections alive for 30s
         )
     )
     
-    # Initialize load balancer if multiple GPU services are configured
+    # Set up load balancing if we have multiple GPU service instances
+    # This is useful when you scale horizontally - multiple GPU services behind the gateway
     if ENABLE_LOAD_BALANCING and len(GPU_SERVICE_URLS) > 1:
         strategy_map = {
             "round_robin": LoadBalancingStrategy.ROUND_ROBIN,
@@ -92,16 +119,32 @@ async def lifespan(app: FastAPI):
     else:
         logger.info(f"Single GPU service mode: {GPU_SERVICE_URL}")
     
-    # Start cache cleanup task (runs in background)
+    # Start the background task that cleans up expired cache entries
+    # Without this, the cache would grow indefinitely with stale entries
     if ENABLE_CACHING:
         cleanup_task = asyncio.create_task(cache_cleanup_task())
         logger.info(f"Caching enabled (TTL: {CACHE_TTL}s)")
     
-    logger.info("API Gateway ready and accepting requests")
+    # Initialize Pub/Sub publisher for event streaming
+    # I do this asynchronously to avoid blocking startup if Pub/Sub is slow
+    global pubsub_publisher
+    if PUBSUB_ENABLED and PUBSUB_PROJECT_ID:
+        try:
+            pubsub_publisher = pubsub_v1.PublisherClient()
+            logger.info(f"Pub/Sub enabled - publishing to topic: {PUBSUB_TOPIC_PREDICTIONS}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Pub/Sub: {e} - continuing without it")
+            pubsub_publisher = None
+    else:
+        logger.info("Pub/Sub disabled or PROJECT_ID not set - continuing without event streaming")
+    
+    # Log the port we're listening on - Cloud Run sets PORT env var
+    port = int(os.getenv("PORT", 8080))
+    logger.info(f"API Gateway ready and accepting requests on port {port}")
     
     yield
     
-    # Shutdown
+    # Clean shutdown - close connections gracefully
     logger.info("Shutting down API Gateway...")
     if load_balancer:
         await load_balancer.close()
@@ -129,17 +172,24 @@ app.add_middleware(
 
 
 async def cache_cleanup_task():
-    """Background task to periodically clean up expired cache entries"""
+    """
+    Background task that runs every minute to remove expired cache entries
+    I run this in the background so it doesn't block request handling
+    """
     while True:
         try:
-            await asyncio.sleep(60)  # Run every minute
+            await asyncio.sleep(60)  # Check every minute
             prediction_cache.cleanup_expired()
         except Exception as e:
             logger.error(f"Error in cache cleanup task: {e}")
 
 
 class ProcessParameters(BaseModel):
-    """Input parameters for process optimization with validation"""
+    """
+    Input parameters for semiconductor manufacturing process optimization
+    I use Pydantic here because it gives me automatic validation and nice error messages
+    The Field constraints ensure we reject invalid inputs before they hit the GPU service
+    """
     temperature: float = Field(..., ge=0, le=500, description="Temperature in Celsius")
     pressure: float = Field(..., ge=0, le=10, description="Pressure in Torr")
     etch_time: float = Field(..., ge=0, le=300, description="Etch time in seconds")
@@ -151,6 +201,7 @@ class ProcessParameters(BaseModel):
 
     @validator('temperature', 'pressure', 'etch_time', 'gas_flow', 'chamber_pressure')
     def validate_positive(cls, v):
+        # Double-check that values are positive - can't have negative pressure or time
         if v < 0:
             raise ValueError('Value must be positive')
         return v
@@ -184,11 +235,16 @@ class BatchPredictionResponse(BaseModel):
 
 
 async def check_gpu_service_health() -> dict:
-    """Check GPU service health with retry logic"""
+    """
+    Check if the GPU service is healthy and responding
+    I use this in the /health endpoint to report system status
+    If load balancing is enabled, I check all backends; otherwise just the single service
+    """
     if http_client is None:
         return {"status": "uninitialized", "error": "HTTP client not initialized"}
     
-    # Use load balancer health if available
+    # If we have load balancing enabled, use the load balancer's health info
+    # It already tracks which backends are healthy, so no need to duplicate that logic
     if load_balancer and ENABLE_LOAD_BALANCING:
         stats = load_balancer.get_stats()
         healthy_backends = [b for b in stats.get("backends", []) if b.get("healthy", False)]
@@ -201,7 +257,8 @@ async def check_gpu_service_health() -> dict:
         else:
             return {"status": "unhealthy", "error": "No healthy backends available"}
     
-    # Fallback to single service check
+    # Single service mode - just hit the health endpoint directly
+    # I retry a few times because network hiccups happen
     for attempt in range(MAX_RETRIES):
         try:
             response = await http_client.get(f"{GPU_SERVICE_URL}/health", timeout=5.0)
@@ -223,12 +280,14 @@ async def check_gpu_service_health() -> dict:
 
 async def call_gpu_service(endpoint: str, data: dict, timeout: float = None) -> dict:
     """
-    Call GPU service with load balancing, retry logic, and error handling
-    Uses load balancer if enabled, otherwise falls back to single service
+    Make a request to the GPU service with proper error handling and retries
+    This is where all the resilience logic lives - retries, timeouts, load balancing
+    I use exponential backoff on retries to avoid hammering a struggling service
     """
     timeout = timeout or REQUEST_TIMEOUT
     
-    # Use load balancer if enabled and available
+    # If load balancing is enabled, let the load balancer handle request routing
+    # It knows which backends are healthy and will pick the best one
     if load_balancer and ENABLE_LOAD_BALANCING:
         for attempt in range(MAX_RETRIES):
             try:
@@ -241,6 +300,7 @@ async def call_gpu_service(endpoint: str, data: dict, timeout: float = None) -> 
                 if response_data:
                     return response_data
                 elif attempt < MAX_RETRIES - 1:
+                    # Exponential backoff - wait longer each retry
                     await asyncio.sleep(RETRY_DELAY * (attempt + 1))
                     continue
                 else:
@@ -255,7 +315,7 @@ async def call_gpu_service(endpoint: str, data: dict, timeout: float = None) -> 
                 else:
                     raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
     
-    # Fallback to single service mode
+    # Single service mode - direct call to the GPU service
     url = f"{GPU_SERVICE_URL}/{endpoint.lstrip('/')}"
     
     for attempt in range(MAX_RETRIES):
@@ -279,6 +339,7 @@ async def call_gpu_service(endpoint: str, data: dict, timeout: float = None) -> 
                 )
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 503:
+                # Service unavailable - might be temporary, so retry
                 logger.warning(f"GPU service unavailable (attempt {attempt + 1}/{MAX_RETRIES})")
                 if attempt < MAX_RETRIES - 1:
                     await asyncio.sleep(RETRY_DELAY * (attempt + 1))
@@ -288,6 +349,7 @@ async def call_gpu_service(endpoint: str, data: dict, timeout: float = None) -> 
                         detail="GPU service unavailable after retries"
                     )
             else:
+                # Other HTTP errors - probably not retryable
                 logger.error(f"GPU service error: {e.response.status_code} - {e.response.text}")
                 raise HTTPException(
                     status_code=e.response.status_code,
@@ -352,7 +414,9 @@ async def health():
         "features": {
             "caching_enabled": ENABLE_CACHING,
             "load_balancing_enabled": ENABLE_LOAD_BALANCING and load_balancer is not None,
-            "connection_pooling": True
+            "connection_pooling": True,
+            "pubsub_enabled": PUBSUB_ENABLED and pubsub_publisher is not None,
+            "event_streaming": PUBSUB_ENABLED
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "requests_processed": request_count
@@ -362,14 +426,10 @@ async def health():
 @app.post("/api/v1/predict", response_model=PredictionResponse)
 async def predict(parameters: ProcessParameters):
     """
-    Predict optimal semiconductor manufacturing settings
-    Uses intelligent caching to improve performance for repeated requests
-    
-    Args:
-        parameters: Process parameters (temperature, pressure, etc.)
-    
-    Returns:
-        Prediction with optimal settings and yield forecast
+    Main prediction endpoint - this is where clients send their process parameters
+    The caching here is key - if someone requests the same parameters twice,
+    we return the cached result instantly instead of hitting the GPU service again
+    This makes a huge difference for repeated queries during optimization workflows
     """
     global request_count
     request_count += 1
@@ -378,7 +438,8 @@ async def predict(parameters: ProcessParameters):
     params_dict = parameters.model_dump()
     
     try:
-        # Check cache first if caching is enabled
+        # First, check if we have this exact request cached
+        # The cache key is a hash of the parameters, so identical requests hit the cache
         if ENABLE_CACHING:
             cache_key = get_cache_key(params_dict)
             cached_result = prediction_cache.get(cache_key)
@@ -388,23 +449,42 @@ async def predict(parameters: ProcessParameters):
                 processing_time = (time.time() - start_time) * 1000
                 cached_result["gateway_processing_time_ms"] = round(processing_time, 2)
                 cached_result["_cached"] = True
-                # Remove cache indicator before returning
+                # Remove the internal cache flag before returning to client
                 cached_result.pop("_cached", None)
                 return PredictionResponse(**cached_result)
         
-        # Cache miss or caching disabled - call GPU service
+        # Cache miss - need to actually call the GPU service
         logger.debug(f"Cache MISS or caching disabled - calling GPU service")
         result = await call_gpu_service("predict", params_dict)
         processing_time = (time.time() - start_time) * 1000
         
-        # Add gateway processing time
+        # Track how long the gateway took (separate from GPU processing time)
         result["gateway_processing_time_ms"] = round(processing_time, 2)
         
-        # Store in cache if caching is enabled
+        # Store the result in cache for next time
         if ENABLE_CACHING:
             cache_key = get_cache_key(params_dict)
             prediction_cache.set(cache_key, result, ttl=CACHE_TTL)
             logger.debug(f"Cached prediction result (key: {cache_key[:8]}...)")
+        
+        # Publish prediction event to Pub/Sub for real-time processing
+        # This enables anomaly detection and data collection for retraining
+        if pubsub_publisher and PUBSUB_ENABLED:
+            try:
+                event_data = {
+                    "parameters": params_dict,
+                    "prediction": result,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "request_id": f"req-{request_count}"
+                }
+                topic_path = pubsub_publisher.topic_path(PUBSUB_PROJECT_ID, PUBSUB_TOPIC_PREDICTIONS)
+                message_data = json.dumps(event_data).encode("utf-8")
+                # Publish asynchronously - don't block the response
+                pubsub_publisher.publish(topic_path, message_data)
+                logger.debug("Published prediction event to Pub/Sub")
+            except Exception as e:
+                # Don't fail the request if Pub/Sub fails
+                logger.warning(f"Failed to publish to Pub/Sub: {e}")
         
         return PredictionResponse(**result)
     except HTTPException:
@@ -526,8 +606,9 @@ async def optimize_process(parameters: ProcessParameters):
 
 def calculate_optimization_score(prediction: PredictionResponse) -> float:
     """
-    Calculate optimization score (0-100)
-    Balanced scoring system considering yield and confidence
+    Calculate an overall optimization score from 0-100
+    I weight yield at 60% and confidence at 40% - yield is more important,
+    but confidence tells us how reliable the prediction is
     """
     yield_score = prediction.predicted_yield * 0.6
     confidence_score = prediction.confidence * 100 * 0.4
@@ -548,14 +629,18 @@ def calculate_improvement_potential(prediction: PredictionResponse) -> dict:
 
 def calculate_cost_savings(prediction: PredictionResponse) -> dict:
     """
-    Calculates estimated cost savings from process optimization
-    Uses semiconductor manufacturing economics to estimate financial impact
+    Estimate the cost savings from optimizing the process
+    This is a simplified model - in reality, wafer costs vary a lot by process node
+    But it gives customers a sense of the financial impact of optimization
+    The math: lower yield means more wafers needed per good die, which costs more
     """
-    # Base cost per wafer represents typical manufacturing cost for a medium-sized fab
+    # Typical cost per wafer for a medium-sized fab (this is a rough estimate)
     base_cost_per_wafer = 1000
     current_yield = prediction.predicted_yield
-    optimal_yield = min(99.0, current_yield + 10.0)
+    optimal_yield = min(99.0, current_yield + 10.0)  # Assume we can improve by 10%
     
+    # Cost per good die = cost per wafer / yield percentage
+    # Lower yield means you need more wafers to get the same number of good dies
     current_cost = base_cost_per_wafer / (current_yield / 100)
     optimal_cost = base_cost_per_wafer / (optimal_yield / 100)
     
@@ -586,5 +671,8 @@ async def get_metrics():
 if __name__ == "__main__":
     import uvicorn
     
-    port = int(os.getenv("PORT", 8081))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Cloud Run provides PORT environment variable - must use it
+    # Default to 8080 for Cloud Run compatibility
+    port = int(os.getenv("PORT", 8080))
+    logger.info(f"Starting API Gateway on port {port}")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

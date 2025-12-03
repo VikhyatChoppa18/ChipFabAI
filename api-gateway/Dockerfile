@@ -23,8 +23,9 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY main.py .
+# Copy application code - need all Python files for imports
+# Using explicit /app/ destination since COPY with multiple files requires directory to end with /
+COPY main.py cache.py load_balancer.py /app/
 
 # Expose port
 EXPOSE 8080
@@ -33,8 +34,10 @@ EXPOSE 8080
 ENV PORT=8080
 
 # Health check for Cloud Run
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD python3 -c "import requests; requests.get('http://localhost:8080/health', timeout=5)"
+# Cloud Run has its own health checks, but this helps during container startup
+# Increased start-period to 60s to allow time for FastAPI to fully start
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
 
 # Run the application
 CMD ["python3", "main.py"]

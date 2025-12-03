@@ -1,13 +1,14 @@
 """
-Load Balancing and Request Distribution for ChipFabAI API Gateway
-Implements round-robin, least-connections, and health-check-based routing
-Optimized for high-availability production deployment
+Load balancer for distributing requests across multiple GPU service instances
+I built this to support horizontal scaling - when you have multiple GPU services running,
+this intelligently routes requests to the healthiest/least loaded one
+Supports several strategies: round-robin, least connections, health-based, and random
 """
 
 import asyncio
 import time
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
 import httpx
@@ -26,7 +27,10 @@ class LoadBalancingStrategy(Enum):
 
 @dataclass
 class BackendServer:
-    """Represents a backend server instance"""
+    """
+    Tracks state for a single GPU service backend
+    I keep track of health, load, and performance metrics to make smart routing decisions
+    """
     url: str
     active_connections: int = 0
     last_health_check: Optional[datetime] = None
@@ -37,23 +41,26 @@ class BackendServer:
     successful_requests: int = 0
     
     def get_success_rate(self) -> float:
-        """Calculate success rate for this backend"""
+        """What percentage of requests to this backend succeeded"""
         if self.total_requests == 0:
-            return 1.0
+            return 1.0  # No data yet, assume it's good
         return self.successful_requests / self.total_requests
     
     def get_health_score(self) -> float:
         """
-        Calculate health score (0-1) based on multiple factors
-        Higher score = healthier backend
+        Calculate a composite health score from 0-1
+        I combine success rate, response time, and current load to get a single number
+        Higher is better - this is what the health-based strategy uses to pick backends
         """
         if not self.is_healthy:
-            return 0.0
+            return 0.0  # Unhealthy backends get zero score
         
-        # Factors: success rate (40%), response time (30%), active connections (30%)
+        # Weighted combination: success rate matters most (40%), then response time (30%), then load (30%)
         success_rate = self.get_success_rate()
-        response_time_factor = max(0, 1 - (self.response_time / 5.0))  # Normalize to 5s
-        connection_factor = max(0, 1 - (self.active_connections / 100))  # Normalize to 100
+        # Normalize response time - 5 seconds is the threshold where it starts hurting the score
+        response_time_factor = max(0, 1 - (self.response_time / 5.0))
+        # Normalize active connections - 100 concurrent is where it starts to matter
+        connection_factor = max(0, 1 - (self.active_connections / 100))
         
         score = (success_rate * 0.4 + response_time_factor * 0.3 + connection_factor * 0.3)
         return max(0.0, min(1.0, score))
@@ -61,8 +68,9 @@ class BackendServer:
 
 class LoadBalancer:
     """
-    Intelligent load balancer for distributing requests across multiple backend servers
-    Supports multiple strategies and automatic health checking
+    Load balancer that distributes requests across multiple GPU service backends
+    I run health checks in the background to know which backends are up
+    Different strategies let you pick how to route requests based on your needs
     """
     
     def __init__(
@@ -74,14 +82,12 @@ class LoadBalancer:
         max_failures: int = 3
     ):
         """
-        Initialize load balancer
+        Initialize the load balancer with a list of backend URLs
         
-        Args:
-            backend_urls: List of backend server URLs
-            strategy: Load balancing strategy to use
-            health_check_interval: Seconds between health checks
-            health_check_timeout: Timeout for health checks
-            max_failures: Maximum consecutive failures before marking unhealthy
+        The health check runs every 30 seconds by default - frequent enough to catch
+        issues quickly, but not so often that it adds overhead
+        max_failures prevents flapping - a backend needs to fail 3 times in a row
+        before we mark it unhealthy (avoids false positives from transient network issues)
         """
         self.backends = [
             BackendServer(url=url) for url in backend_urls
@@ -112,7 +118,10 @@ class LoadBalancer:
             logger.info("Stopped health check loop")
     
     async def _health_check_loop(self):
-        """Continuously check health of all backends"""
+        """
+        Background loop that continuously checks backend health
+        Runs forever until cancelled during shutdown
+        """
         while True:
             try:
                 await asyncio.sleep(self.health_check_interval)
@@ -123,12 +132,18 @@ class LoadBalancer:
                 logger.error(f"Error in health check loop: {e}")
     
     async def _check_all_backends(self):
-        """Check health of all backend servers"""
+        """
+        Check all backends in parallel - much faster than doing them sequentially
+        I use gather with return_exceptions so one failing backend doesn't break the others
+        """
         tasks = [self._check_backend_health(backend) for backend in self.backends]
         await asyncio.gather(*tasks, return_exceptions=True)
     
     async def _check_backend_health(self, backend: BackendServer):
-        """Check health of a single backend server"""
+        """
+        Check if a single backend is healthy by hitting its /health endpoint
+        I track response time here too - slow backends get lower health scores
+        """
         try:
             start_time = time.time()
             response = await self.http_client.get(f"{backend.url}/health", timeout=self.health_check_timeout)
@@ -140,7 +155,7 @@ class LoadBalancer:
                 
                 if response.status_code == 200:
                     backend.is_healthy = True
-                    backend.failure_count = 0
+                    backend.failure_count = 0  # Reset on success
                     logger.debug(f"Backend {backend.url} is healthy (response time: {response_time:.2f}s)")
                 else:
                     backend.failure_count += 1
@@ -148,9 +163,11 @@ class LoadBalancer:
                         backend.is_healthy = False
                         logger.warning(f"Backend {backend.url} marked as unhealthy (failures: {backend.failure_count})")
         except Exception as e:
+            # Network error or timeout - treat as failure
             async with self.lock:
                 backend.failure_count += 1
-                backend.response_time = self.health_check_timeout * 2  # Penalty for timeout
+                # Penalize timeouts heavily in the response time metric
+                backend.response_time = self.health_check_timeout * 2
                 if backend.failure_count >= self.max_failures:
                     backend.is_healthy = False
                 logger.warning(f"Health check failed for {backend.url}: {e}")
@@ -161,10 +178,8 @@ class LoadBalancer:
     
     async def select_backend(self) -> Optional[BackendServer]:
         """
-        Select backend server based on load balancing strategy
-        
-        Returns:
-            Selected backend server or None if no healthy backends available
+        Pick which backend to use for the next request based on the selected strategy
+        Only considers healthy backends - unhealthy ones are automatically excluded
         """
         healthy_backends = self._get_healthy_backends()
         
@@ -174,23 +189,28 @@ class LoadBalancer:
         
         async with self.lock:
             if self.strategy == LoadBalancingStrategy.ROUND_ROBIN:
+                # Simple round-robin - just cycle through backends in order
                 backend = healthy_backends[self.current_index % len(healthy_backends)]
                 self.current_index += 1
                 return backend
             
             elif self.strategy == LoadBalancingStrategy.LEAST_CONNECTIONS:
+                # Send to the backend with fewest active connections
+                # Good for balancing load when requests take different amounts of time
                 return min(healthy_backends, key=lambda b: b.active_connections)
             
             elif self.strategy == LoadBalancingStrategy.HEALTH_BASED:
-                # Select backend with highest health score
+                # My favorite - picks the backend with the best health score
+                # This considers success rate, response time, and current load
                 return max(healthy_backends, key=lambda b: b.get_health_score())
             
             elif self.strategy == LoadBalancingStrategy.RANDOM:
+                # Random selection - sometimes useful for testing
                 import random
                 return random.choice(healthy_backends)
             
             else:
-                # Default to round-robin
+                # Fallback to round-robin if strategy is unknown
                 backend = healthy_backends[self.current_index % len(healthy_backends)]
                 self.current_index += 1
                 return backend
@@ -203,22 +223,15 @@ class LoadBalancer:
         timeout: float = 60.0
     ) -> Tuple[Optional[Dict], Optional[BackendServer]]:
         """
-        Execute request through load balancer
-        
-        Args:
-            method: HTTP method (GET, POST, etc.)
-            endpoint: API endpoint path
-            data: Request data for POST requests
-            timeout: Request timeout in seconds
-            
-        Returns:
-            Tuple of (response_data, backend_used) or (None, None) on failure
+        Execute a request through the load balancer
+        This picks a backend, sends the request, and tracks the results
+        Returns the response data and which backend was used (useful for debugging)
         """
         backend = await self.select_backend()
         if backend is None:
-            return None, None
+            return None, None  # No healthy backends available
         
-        # Increment active connections
+        # Track that this backend is handling a request
         async with self.lock:
             backend.active_connections += 1
             backend.total_requests += 1
@@ -238,21 +251,23 @@ class LoadBalancer:
             
             response_time = time.time() - start_time
             
-            # Update backend statistics
+            # Update metrics based on how the request went
             async with self.lock:
                 backend.response_time = response_time
-                backend.active_connections -= 1
+                backend.active_connections -= 1  # Request finished
                 
                 if response.status_code < 400:
                     backend.successful_requests += 1
                     return response.json(), backend
                 else:
+                    # HTTP error - count as failure
                     backend.failure_count += 1
                     if backend.failure_count >= self.max_failures:
-                        backend.is_healthy = False
+                        backend.is_healthy = False  # Too many failures, mark unhealthy
                     return None, backend
                     
         except Exception as e:
+            # Network error or timeout
             async with self.lock:
                 backend.active_connections -= 1
                 backend.failure_count += 1
