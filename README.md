@@ -216,6 +216,7 @@ This project addresses a significant market opportunity for Google Cloud in the 
 
 This project validates that Google Cloud can serve as the preferred platform for next-generation semiconductor manufacturing, offering a combination of AI capabilities and scalable infrastructure that's difficult for competitors to replicate.
 
+LICENSE:
+https://github.com/VikhyatChoppa18/ChipFabAI?tab=License-1-ov-file#readme
 
-MIT License
 
